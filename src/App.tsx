@@ -236,6 +236,7 @@ export default function App() {
     audioSettings,
     currentVote,
     setAudioSettings,
+    setError,
     toggleLocalMute,
     sendChatMessage,
     triggerTTSProxy,
@@ -410,6 +411,15 @@ export default function App() {
               Instantly construct volatile peer pipelines. Your voice frequency is scrambled at the DSP sensor level, leaving zero footprint in database records.
             </p>
           </div>
+
+          {error && (
+            <div className="p-3.5 bg-rose-500/10 border border-rose-500/25 text-rose-400 text-xs font-mono rounded-xl flex items-center justify-between gap-3 shadow-[0_0_15px_rgba(244,63,94,0.1)]">
+              <span className="flex-1">{error}</span>
+              <button type="button" onClick={() => setError(null)} className="text-slate-400 hover:text-white shrink-0 cursor-pointer">
+                <X className="w-4.5 h-4.5" />
+              </button>
+            </div>
+          )}
 
           <form 
             onSubmit={(e) => { e.preventDefault(); joinRoomByHashtag(hashtagInput); }}
@@ -599,6 +609,23 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      {/* ERROR WARNING BANNER */}
+      {error && (
+        <div className="bg-rose-950/25 border-b border-rose-500/30 px-5 py-3 flex items-center justify-between gap-4 relative z-40 animate-pulse shadow-[inset_0_1px_15px_rgba(244,63,94,0.05)]" id="error-banner">
+          <div className="flex items-center gap-2 text-rose-400 text-xs font-mono">
+            <ShieldAlert className="w-4 h-4 shrink-0 text-rose-500" />
+            <span className="font-semibold">{error}</span>
+          </div>
+          <button
+            onClick={() => setError(null)}
+            className="text-slate-400 hover:text-white transition-colors cursor-pointer"
+            title="Dismiss error alert"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* MOBILE TAB NAVIGATION */}
       <div className="md:hidden px-4 pt-3.5 pb-1.5 flex gap-2 border-b border-slate-800/40 bg-deep-black/40 backdrop-blur-md shrink-0 z-30" id="mobile-tabs-nav">

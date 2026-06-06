@@ -507,7 +507,7 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
 
     } catch (err: any) {
       console.error('Failed to bind voice stream:', err);
-      alert('Microphone access denied or failed to bind AudioContext.');
+      setError(`Microphone error: ${err.message || err}. Please check mic permissions and secure origin.`);
       setIsBroadcasting(false);
     }
   };
@@ -731,6 +731,7 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
     audioSettings,
     currentVote,
     setAudioSettings,
+    setError,
     toggleLocalMute,
     sendChatMessage,
     triggerTTSProxy,
