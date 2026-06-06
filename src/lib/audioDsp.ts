@@ -5,7 +5,7 @@
  * DSP Library for Low-Latency Audio Processing using Web Audio API
  */
 
-// --- 1. Procedural Noise Generators for Environmental Masking (FR-3.3) ---
+// --- 1. Procedural Noise Generators for Environmental Audio Masking ---
 
 /**
  * Creates a White Noise buffer. White noise consists of random samples between -1.0 and 1.0.
@@ -200,7 +200,7 @@ export function createProceduralCafe(ctx: AudioContext): { source: AudioBufferSo
 }
 
 
-// --- 2. Low-Latency Time-Domain Granular Pitch Shifter Node (FR-3.2) ---
+// --- 2. Low-Latency Time-Domain Granular Pitch Shifter Node ---
 
 /**
  * Creates an elegant, low-latency granular Pitch and Formant Shifter.

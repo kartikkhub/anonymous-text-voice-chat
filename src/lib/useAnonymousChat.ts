@@ -15,10 +15,10 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
   const [isBroadcasting, setIsBroadcasting] = useState(false);
   const [isMonitoringOwnVoice, setIsMonitoringOwnVoice] = useState(false);
   
-  // Private locally-muted users (FR-5.1)
+  // Local mute list
   const [localMuted, setLocalMuted] = useState<Set<string>>(new Set());
   
-  // Audio settings (FR-3.2, FR-3.3)
+  // Audio settings (DSP pitch and masking)
   const [audioSettings, setAudioSettings] = useState<AudioSettings>({
     pitch: 1.0,
     formant: 1.0,
@@ -26,7 +26,7 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
     naturalVoice: false
   });
 
-  // Active vote state to render beautiful visual banner when vote kicks are occurring (FR-5.2)
+  // Active vote state to render banners when vote-kicks occur
   const [currentVote, setCurrentVote] = useState<{
     targetSessionId: string;
     targetAlias: string;
@@ -90,7 +90,7 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
         ws.onopen = () => {
           console.log('[WS] Connected to Server');
           setConnected(true);
-          // Register joining the room Hashtag (FR-4.1)
+          // Send join payload
           ws.send(JSON.stringify({
             type: 'join',
             hashtag,
@@ -135,7 +135,7 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
                 break;
 
               case 'message':
-                // Ephemeral Burn or Standard / Spoiler chat messages (FR-2.1, FR-2.2, FR-2.3)
+                // Handle incoming text message
                 setMessages(prev => {
                   const msgExists = prev.some(m => m.id === data.message.id);
                   if (msgExists) return prev;
@@ -144,7 +144,7 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
                 break;
 
               case 'voice_proxy_tts':
-                // Incoming proxy synthetic prompt (FR-3.4)
+                // Speak incoming TTS payload
                 setMessages(prev => {
                   const msgExists = prev.some(m => m.id === data.message.id);
                   if (msgExists) return prev;
@@ -169,7 +169,7 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
                 break;
 
               case 'vote_update':
-                // Democratic Vote-Kick visual banner tracking (FR-5.2)
+                // Active vote-kick alerts tracking
                 setCurrentVote(prev => {
                   const hasVoted = prev ? (prev.targetSessionId === data.targetSessionId ? prev.hasVoted : false) : false;
                   return {
@@ -281,7 +281,7 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
     setIsMonitoringOwnVoice(false);
   };
 
-  // Switch dynamic pitch slider settings directly on the active Web Audio Node on-the-fly (FR-3.2)
+  // Apply voice modulation parameters dynamically
   useEffect(() => {
     if (pitchShifterNodeRef.current) {
       pitchShifterNodeRef.current.setPitch(audioSettings.pitch);
@@ -289,11 +289,11 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
         pitchShifterNodeRef.current.setBypass(audioSettings.naturalVoice);
       }
     }
-    // Reflect procedural environmental changes instantly
+    // Update ambient audio settings
     updateEnvironmentalMasking();
   }, [audioSettings.pitch, audioSettings.naturalVoice, audioSettings.masking]);
 
-  // Handle local private toggling (FR-5.1)
+  // Toggle mute state for peer locally
   const toggleLocalMute = (userSessionId: string) => {
     setLocalMuted(prev => {
       const next = new Set(prev);
@@ -306,7 +306,7 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
     });
   };
 
-  // Fire Text message over socket (FR-2.1)
+  // Send chat message
   const sendChatMessage = (
     text: string, 
     options: { 
@@ -332,7 +332,7 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
     }));
   };
 
-  // Send Local Text-to-Speech proxy (FR-3.4)
+  // Send TTS proxy payload
   const triggerTTSProxy = (text: string) => {
     if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) return;
     socketRef.current.send(JSON.stringify({
@@ -373,7 +373,7 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
     }
   };
 
-  // Cast vote kick target (FR-5.2)
+  // Initiate vote-kick against peer
   const castVoteKickUser = (targetSessionId: string) => {
     if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) return;
     
@@ -398,7 +398,7 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
     }));
   };
 
-  // Request simulated bot to generate a cyber-trash talk roaster using AI (FR-Gemini)
+  // Request bot chatbot response
   const triggerBotRoast = (botSessionId: string, targetSessionId?: string) => {
     if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) return;
     socketRef.current.send(JSON.stringify({
@@ -440,7 +440,7 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
       if (pitchShifterNodeRef.current) pitchShifterNodeRef.current.disconnect();
       if (dspProcessorNodeRef.current) dspProcessorNodeRef.current.disconnect();
 
-      // 3. Link mic and create Pitch Shifter DSP Node (FR-3.2)
+      // 3. Instantiate voice modulation DSP node
       micSourceNodeRef.current = ctx.createMediaStreamSource(stream);
       pitchShifterNodeRef.current = createPitchShifterNode(ctx, audioSettings.pitch);
       if (typeof pitchShifterNodeRef.current.setBypass === 'function') {
@@ -502,7 +502,7 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
       setIsBroadcasting(true);
       notifyVoiceStateToServer(true, false);
 
-      // Run environmental masking immediately (FR-3.3)
+      // Apply active ambient overlays
       updateEnvironmentalMasking();
 
     } catch (err: any) {
@@ -551,7 +551,7 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
     }
   };
 
-  // Manage environmental overlays (FR-3.3)
+  // Start environmental masking loop
   const updateEnvironmentalMasking = () => {
     const ctx = audioContextRef.current;
     if (!ctx || !isBroadcasting) return;

@@ -67,8 +67,7 @@ async function generateTrashTalk(contextMessages: Array<{ senderAlias: string; t
   }
 }
 
-// Adjectives and Nouns for random alias generation as required by FR-1.2:
-// "e.g., 'Neon Tiger'" (Word1: Space/Color/Style, Word2: Animal/Element)
+// Lists for random alias generation (e.g., 'Neon Tiger')
 const SYSTEM_ADJECTIVES = [
   'Neon', 'Electric', 'Cosmic', 'Silent', 'Mystic', 'Glowing', 'Stealth', 
   'Shadow', 'Quantum', 'Retro', 'Solar', 'Lunar', 'Sonic', 'Cyber', 
@@ -83,7 +82,7 @@ const SYSTEM_NOUNS = [
   'Stinger', 'Viper', 'Rhino', 'Leopard', 'Raptor'
 ];
 
-// Identicon geometric shapes as required by FR-1.1
+// Geometric shapes for user avatars
 const IDENTICON_SHAPES = [
   'circle', 'triangle', 'square', 'hexagon', 'octagon', 'pentagon', 'diamond', 'star'
 ];
@@ -118,7 +117,7 @@ interface Room {
 
 const rooms = new Map<string, Room>();
 
-// Track vote-kick blocks (FR-5.2)
+// Track vote-kick ban lists (24-hour block)
 // sessionId -> { hashtag, expires }
 const blockedSessions = new Map<string, { hashtag: string; expires: number }>();
 
@@ -153,7 +152,7 @@ async function startServer() {
     });
   });
 
-  // Check block status (FR-5.2) before allowing join
+  // Check ban status before allowing user to join
   app.get('/api/check-block', (req, res) => {
     const { sessionId, hashtag } = req.query;
     if (typeof sessionId !== 'string' || typeof hashtag !== 'string') {
@@ -250,7 +249,7 @@ async function startServer() {
             existingAliases.add(p.alias);
           }
 
-          // Generate unique anonymous identities as required by FR-1.1 and FR-1.2
+          // Generate unique identity with random avatar parameters
           const alias = generateUniqueAlias(existingAliases);
           const color = IDENTICON_COLORS[Math.floor(Math.random() * IDENTICON_COLORS.length)];
           const shape = IDENTICON_SHAPES[Math.floor(Math.random() * IDENTICON_SHAPES.length)];
@@ -326,7 +325,7 @@ async function startServer() {
         if (!me) return;
 
         if (data.type === 'message') {
-          // Wrap text chat & ephemeral features (FR-2.1, FR-2.2, FR-2.3)
+          // Handle messaging with self-destruct or spoiler options
           const { text, isBurn, burnTimer, isSpoiler, mediaUrl, mediaName, mediaType } = data;
           
           if (!room.recentMessages) {
@@ -411,7 +410,7 @@ async function startServer() {
         }
 
         if (data.type === 'voice_proxy_tts') {
-          // Text-to-Speech Proxy (FR-3.4)
+          // Handle Text-to-Speech proxy payload
           const { text } = data;
           broadcastToRoom(currentHashtag, {
             type: 'voice_proxy_tts',
@@ -460,7 +459,7 @@ async function startServer() {
         }
 
         if (data.type === 'vote_kick') {
-          // Democratic Vote-Kick (FR-5.2)
+          // Handle vote-kick sequence
           const { targetSessionId } = data;
           if (!targetSessionId) return;
 
@@ -719,7 +718,7 @@ async function startServer() {
     });
   });
 
-  // Helper helper to return simple participant summary details
+  // Helper to return simple participant metadata
   function p_meta(p: Participant) {
     return {
       id: p.id,
@@ -765,8 +764,7 @@ async function startServer() {
     });
   }
 
-  // Room Self-Destruction loop (FR-4.2):
-  // "If a room is inactive for 30 consecutive minutes, permanently delete the room instance"
+  // Room Self-Destruction: automatically prune inactive rooms after 30 minutes
   setInterval(() => {
     const now = Date.now();
     for (const [hashtag, room] of rooms.entries()) {
