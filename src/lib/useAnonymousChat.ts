@@ -14,6 +14,7 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
   const [connected, setConnected] = useState(false);
   const [isBroadcasting, setIsBroadcasting] = useState(false);
   const [isMonitoringOwnVoice, setIsMonitoringOwnVoice] = useState(false);
+  const [analyserNode, setAnalyserNode] = useState<AnalyserNode | null>(null);
   
   // Local mute list
   const [localMuted, setLocalMuted] = useState<Set<string>>(new Set());
@@ -241,12 +242,14 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
           console.error('[WS] Connection error', e);
           setError('WebSocket failed to host chat room connection.');
           setLoading(false);
+          stopVoiceCapture();
         };
 
         ws.onclose = () => {
           console.log('[WS] Connection closed');
           setConnected(false);
           setLoading(false);
+          stopVoiceCapture();
         };
 
       } catch (err) {
@@ -415,6 +418,13 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
    *            [Procedural Ambient Loops]
    */
   const startVoiceCapture = async () => {
+    setError(null);
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setError("WebRTC microphone access is not supported by your browser or connection. Please use a secure origin (localhost or HTTPS).");
+      setIsBroadcasting(false);
+      return;
+    }
+
     try {
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -495,6 +505,12 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
       pitchShifterNodeRef.current.connect(monitorGainNodeRef.current);
       monitorGainNodeRef.current.connect(ctx.destination);
 
+      // Create AnalyserNode for real-time visual waves
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      pitchShifterNodeRef.current.connect(analyser);
+      setAnalyserNode(analyser);
+
       // Route the Pitch Shifter output to the processing script downsampler
       pitchShifterNodeRef.current.connect(dspProcessorNodeRef.current);
       dspProcessorNodeRef.current.connect(ctx.destination);
@@ -529,6 +545,7 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
       stopEnvironmentalMasking();
       notifyVoiceStateToServer(false, false);
       setIsBroadcasting(false);
+      setAnalyserNode(null);
     } catch(e){}
   };
 
@@ -721,6 +738,7 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
   return {
     loading,
     error,
+    analyserNode,
     connected,
     myIdentity,
     participants,

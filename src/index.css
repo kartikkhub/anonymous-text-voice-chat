@@ -18,6 +18,66 @@
   --color-zinc-800: #27272a;
 }
 
+:root {
+  --neon-accent: #38bdf8;
+  --neon-accent-rgb: 56, 189, 248;
+  --neon-secondary: #6366f1;
+  --neon-secondary-rgb: 99, 102, 241;
+}
+
+.theme-matrix {
+  --neon-accent: #10b981;
+  --neon-accent-rgb: 16, 185, 129;
+  --neon-secondary: #059669;
+  --neon-secondary-rgb: 5, 150, 105;
+}
+
+.theme-obsidian {
+  --neon-accent: #e4e4e7;
+  --neon-accent-rgb: 228, 228, 231;
+  --neon-secondary: #71717a;
+  --neon-secondary-rgb: 113, 113, 122;
+}
+
+.theme-sunset {
+  --neon-accent: #f97316;
+  --neon-accent-rgb: 249, 115, 22;
+  --neon-secondary: #ef4444;
+  --neon-secondary-rgb: 239, 68, 68;
+}
+
+/* Theme helper utility classes */
+.text-theme-accent {
+  color: var(--neon-accent);
+}
+.bg-theme-accent-10 {
+  background-color: rgba(var(--neon-accent-rgb), 0.1);
+}
+.bg-theme-accent-20 {
+  background-color: rgba(var(--neon-accent-rgb), 0.2);
+}
+.border-theme-accent-30 {
+  border-color: rgba(var(--neon-accent-rgb), 0.3);
+}
+.border-theme-accent-15 {
+  border-color: rgba(var(--neon-accent-rgb), 0.15);
+}
+.shadow-theme-glow {
+  box-shadow: 0 0 15px rgba(var(--neon-accent-rgb), 0.2);
+}
+.text-theme-secondary {
+  color: var(--neon-secondary);
+}
+.bg-theme-secondary-10 {
+  background-color: rgba(var(--neon-secondary-rgb), 0.1);
+}
+.border-theme-secondary-20 {
+  border-color: rgba(var(--neon-secondary-rgb), 0.2);
+}
+.border-theme-secondary-30 {
+  border-color: rgba(var(--neon-secondary-rgb), 0.3);
+}
+
 @layer base {
   body {
     font-family: var(--font-sans);
