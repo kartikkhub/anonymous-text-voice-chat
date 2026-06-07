@@ -218,19 +218,20 @@ export function createPitchShifterNode(
   const node = ctx.createScriptProcessor(bufferSize, 1, 1);
   
   // Circular buffer variables
-  const size = 8192;
+  const size = 16384;
   const circularBuffer = new Float32Array(size);
   let writePtr = 0;
-  let readPtr = 0;
   
   let pitchRatio = initialPitch;
   let bypass = false;
 
-  // Granular overlapping settings
-  const grainSize = 512;
-  const overlap = 2;
-  const step = grainSize / overlap;
+  // Pitch shifting delay settings: 25ms delay window is optimal for vocals
+  const delayMs = 25;
+  const delaySamples = Math.round((delayMs / 1000) * ctx.sampleRate);
   
+  let phase1 = 0.0;
+  let phase2 = 0.5; // 180 degrees out of phase
+
   // Custom interface extension
   const extendedNode = node as any;
   extendedNode.setPitch = (p: number) => {
@@ -258,33 +259,51 @@ export function createPitchShifterNode(
       writePtr = (writePtr + 1) % size;
     }
 
-    // 2. Read out pitch-modulated granular overlapping grains
-    // We compute output sample by sample using overlap-add
+    // 2. Compute phase step per sample based on pitchRatio
+    // phaseStep = (1.0 - pitchRatio) / delaySamples
+    const phaseStep = (1.0 - pitchRatio) / delaySamples;
+
+    // 3. Read out modulated samples from dual-delay lines with crossfading window
     for (let i = 0; i < len; i++) {
-      // Resample based on pointer
-      const integerReadPtr = Math.floor(readPtr);
-      const frac = readPtr - integerReadPtr;
-      
-      const nextReadPtr = (integerReadPtr + 1) % size;
-      
-      // Interpolate for smoother high-mids frequencies (prevents harsh distortion)
-      const s0 = circularBuffer[integerReadPtr];
-      const s1 = circularBuffer[nextReadPtr];
-      const sample = s0 + frac * (s1 - s0);
+      const currentWritePtr = (writePtr - len + i + size) % size;
 
-      output[i] = sample;
+      // Advance phases
+      phase1 += phaseStep;
+      if (phase1 < 0) phase1 += 1.0;
+      if (phase1 >= 1.0) phase1 -= 1.0;
 
-      // Advance read pointer based on pitch ratio relative to current write speed
-      // If we are pitching up, we read faster, if we pitch down, we read slower
-      readPtr = (readPtr + pitchRatio) % size;
-    }
+      phase2 += phaseStep;
+      if (phase2 < 0) phase2 += 1.0;
+      if (phase2 >= 1.0) phase2 -= 1.0;
 
-    // Dynamic pointer reconciliation: Avoid read/write colliding or drifting too far
-    const distance = (writePtr - readPtr + size) % size;
-    const minSafetyDistance = grainSize + 256;
-    if (distance < minSafetyDistance || distance > size - minSafetyDistance) {
-      // Re-anchor read pointer safely behind write pointer
-      readPtr = (writePtr - minSafetyDistance + size) % size;
+      // Modulated delay amounts in samples
+      const delay1 = phase1 * delaySamples;
+      const delay2 = phase2 * delaySamples;
+
+      // Delay read indices
+      const readPtr1 = (currentWritePtr - delay1 + size) % size;
+      const readPtr2 = (currentWritePtr - delay2 + size) % size;
+
+      // Linear interpolation for delay line 1
+      const intPtr1 = Math.floor(readPtr1);
+      const frac1 = readPtr1 - intPtr1;
+      const nextPtr1 = (intPtr1 + 1) % size;
+      const sample1 = circularBuffer[intPtr1] + frac1 * (circularBuffer[nextPtr1] - circularBuffer[intPtr1]);
+
+      // Linear interpolation for delay line 2
+      const intPtr2 = Math.floor(readPtr2);
+      const frac2 = readPtr2 - intPtr2;
+      const nextPtr2 = (intPtr2 + 1) % size;
+      const sample2 = circularBuffer[intPtr2] + frac2 * (circularBuffer[nextPtr2] - circularBuffer[intPtr2]);
+
+      // Hanning-like (sin^2) window gains for power-preserving smooth crossfades
+      const gain1 = Math.sin(phase1 * Math.PI);
+      const gain1Sq = gain1 * gain1;
+      const gain2 = Math.sin(phase2 * Math.PI);
+      const gain2Sq = gain2 * gain2;
+
+      // Sum the windowed delay outputs to produce output sample
+      output[i] = (sample1 * gain1Sq + sample2 * gain2Sq);
     }
   };
 

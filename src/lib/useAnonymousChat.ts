@@ -47,6 +47,12 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
   const monitorGainNodeRef = useRef<GainNode | null>(null);
   const ttsOutputNodeRef = useRef<AudioNode | null>(null);
   
+  // Formant filter bank refs
+  const f1FilterRef = useRef<BiquadFilterNode | null>(null);
+  const f2FilterRef = useRef<BiquadFilterNode | null>(null);
+  const f3FilterRef = useRef<BiquadFilterNode | null>(null);
+  const channelMergerNodeRef = useRef<ChannelMergerNode | null>(null);
+  
   // Procedural noise tracking for disposal (FR-3.3)
   const rainSourceRef = useRef<any | null>(null);
   const trafficSourceRef = useRef<any | null>(null);
@@ -292,9 +298,31 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
         pitchShifterNodeRef.current.setBypass(audioSettings.naturalVoice);
       }
     }
-    // Update ambient audio settings
+    updateFormantFilters(audioSettings.formant, audioSettings.naturalVoice);
     updateEnvironmentalMasking();
-  }, [audioSettings.pitch, audioSettings.naturalVoice, audioSettings.masking]);
+  }, [audioSettings.pitch, audioSettings.formant, audioSettings.naturalVoice, audioSettings.masking]);
+
+  const updateFormantFilters = (ratio: number, bypass: boolean) => {
+    const ctx = audioContextRef.current;
+    if (!ctx) return;
+    
+    const f1Gain = bypass ? 0.0 : 6.0;
+    const f2Gain = bypass ? 0.0 : 6.0;
+    const f3Gain = bypass ? 0.0 : 4.0;
+
+    if (f1FilterRef.current) {
+      f1FilterRef.current.gain.setValueAtTime(f1Gain, ctx.currentTime);
+      f1FilterRef.current.frequency.setValueAtTime(500 * ratio, ctx.currentTime);
+    }
+    if (f2FilterRef.current) {
+      f2FilterRef.current.gain.setValueAtTime(f2Gain, ctx.currentTime);
+      f2FilterRef.current.frequency.setValueAtTime(1500 * ratio, ctx.currentTime);
+    }
+    if (f3FilterRef.current) {
+      f3FilterRef.current.gain.setValueAtTime(f3Gain, ctx.currentTime);
+      f3FilterRef.current.frequency.setValueAtTime(2500 * ratio, ctx.currentTime);
+    }
+  };
 
   // Toggle mute state for peer locally
   const toggleLocalMute = (userSessionId: string) => {
@@ -462,23 +490,24 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
       // Initially muted or soft based on toggled variable
       monitorGainNodeRef.current.gain.setValueAtTime(isMonitoringOwnVoice ? 0.3 : 0.0, ctx.currentTime);
 
-      // Create downsampling script processor to translate raw floats into lightweight binary packets
+      // Create downsampling script processor with 2 input channels to separate voice and masking noise
       const bufferSize = 4096; // captures periodic packet
-      dspProcessorNodeRef.current = ctx.createScriptProcessor(bufferSize, 1, 1);
+      dspProcessorNodeRef.current = ctx.createScriptProcessor(bufferSize, 2, 1);
       
       const inputSampleRate = ctx.sampleRate;
 
       // Capture modulated chunks and send to other participants over WebSockets
       dspProcessorNodeRef.current.onaudioprocess = (e) => {
-        const dspData = e.inputBuffer.getChannelData(0);
+        const voiceData = e.inputBuffer.getChannelData(0);
+        const noiseData = e.inputBuffer.numberOfChannels > 1 ? e.inputBuffer.getChannelData(1) : new Float32Array(voiceData.length);
         
-        // 1. Detect if user is actively speaking (simple gate threshold for UI status indicators)
+        // 1. Detect if user is actively speaking (using voiceData only, completely isolating environmental noise)
         let isSpeaking = false;
         let sumSqr = 0;
-        for (let i = 0; i < dspData.length; i++) {
-          sumSqr += dspData[i] * dspData[i];
+        for (let i = 0; i < voiceData.length; i++) {
+          sumSqr += voiceData[i] * voiceData[i];
         }
-        const rms = Math.sqrt(sumSqr / dspData.length);
+        const rms = Math.sqrt(sumSqr / voiceData.length);
         if (rms > 0.015) { // threshold gate filter
           isSpeaking = true;
         }
@@ -486,8 +515,14 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
         // Send active voice metadata states
         notifyVoiceStateToServer(true, isSpeaking);
 
+        // Mix voice and noise for downsampling and transmission
+        const mixedData = new Float32Array(voiceData.length);
+        for (let i = 0; i < voiceData.length; i++) {
+          mixedData[i] = voiceData[i] + noiseData[i];
+        }
+
         // 2. Downsample Float32 down to optimized monophonic 16kHz Int16 to save bandwidth
-        const chunk = downsampleTo16kPCM(dspData, inputSampleRate);
+        const chunk = downsampleTo16kPCM(mixedData, inputSampleRate);
         const base64Audio = arrayBufferToBase64(chunk.buffer);
 
         // 3. Dispatch to WebSockets
@@ -502,17 +537,58 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
 
       // 5. Connect node streams
       micSourceNodeRef.current.connect(pitchShifterNodeRef.current);
-      pitchShifterNodeRef.current.connect(monitorGainNodeRef.current);
+
+      // Create Formant peaking filters (vocal tract resonators)
+      const f1 = ctx.createBiquadFilter();
+      f1.type = 'peaking';
+      f1.Q.setValueAtTime(4.0, ctx.currentTime);
+      f1.gain.setValueAtTime(audioSettings.naturalVoice ? 0.0 : 6.0, ctx.currentTime);
+      f1FilterRef.current = f1;
+
+      const f2 = ctx.createBiquadFilter();
+      f2.type = 'peaking';
+      f2.Q.setValueAtTime(4.0, ctx.currentTime);
+      f2.gain.setValueAtTime(audioSettings.naturalVoice ? 0.0 : 6.0, ctx.currentTime);
+      f2FilterRef.current = f2;
+
+      const f3 = ctx.createBiquadFilter();
+      f3.type = 'peaking';
+      f3.Q.setValueAtTime(4.0, ctx.currentTime);
+      f3.gain.setValueAtTime(audioSettings.naturalVoice ? 0.0 : 4.0, ctx.currentTime);
+      f3FilterRef.current = f3;
+
+      // Apply initial formant settings
+      const baseF1 = 500;
+      const baseF2 = 1500;
+      const baseF3 = 2500;
+      f1.frequency.setValueAtTime(baseF1 * audioSettings.formant, ctx.currentTime);
+      f2.frequency.setValueAtTime(baseF2 * audioSettings.formant, ctx.currentTime);
+      f3.frequency.setValueAtTime(baseF3 * audioSettings.formant, ctx.currentTime);
+
+      // Connect Formant filters in series after the pitch shifter
+      pitchShifterNodeRef.current.connect(f1);
+      f1.connect(f2);
+      f2.connect(f3);
+
+      // Connect final formant output to local monitor and speakers
+      f3.connect(monitorGainNodeRef.current);
       monitorGainNodeRef.current.connect(ctx.destination);
 
-      // Create AnalyserNode for real-time visual waves
+      // Create AnalyserNode for real-time visual waves connected to final output
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 256;
-      pitchShifterNodeRef.current.connect(analyser);
+      f3.connect(analyser);
       setAnalyserNode(analyser);
 
-      // Route the Pitch Shifter output to the processing script downsampler
-      pitchShifterNodeRef.current.connect(dspProcessorNodeRef.current);
+      // Create ChannelMergerNode to mix voice and masking noise into the ScriptProcessor
+      const merger = ctx.createChannelMerger(2);
+      channelMergerNodeRef.current = merger;
+
+      // Connect voice (f3) to merger input channel 0
+      f3.connect(merger, 0, 0);
+
+      // Connect merger output to the ScriptProcessor input
+      merger.connect(dspProcessorNodeRef.current);
       dspProcessorNodeRef.current.connect(ctx.destination);
 
       setIsBroadcasting(true);
@@ -534,6 +610,10 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
         micStreamRef.current.getTracks().forEach(t => t.stop());
         micStreamRef.current = null;
       }
+      if (channelMergerNodeRef.current) {
+        channelMergerNodeRef.current.disconnect();
+        channelMergerNodeRef.current = null;
+      }
       if (dspProcessorNodeRef.current) {
         dspProcessorNodeRef.current.disconnect();
         dspProcessorNodeRef.current = null;
@@ -541,6 +621,18 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
       if (pitchShifterNodeRef.current) {
         pitchShifterNodeRef.current.disconnect();
         pitchShifterNodeRef.current = null;
+      }
+      if (f1FilterRef.current) {
+        f1FilterRef.current.disconnect();
+        f1FilterRef.current = null;
+      }
+      if (f2FilterRef.current) {
+        f2FilterRef.current.disconnect();
+        f2FilterRef.current = null;
+      }
+      if (f3FilterRef.current) {
+        f3FilterRef.current.disconnect();
+        f3FilterRef.current = null;
       }
       stopEnvironmentalMasking();
       notifyVoiceStateToServer(false, false);
@@ -583,9 +675,10 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
     // Keep ambient noise at a subtle level so it doesn't drown original vocal chords
     noiseGainNodeRef.current.gain.setValueAtTime(0.12, ctx.currentTime);
 
-    // Dynamic routing: Noise -> pitchShifter to be transmitted, and subtle local output
-    if (pitchShifterNodeRef.current) {
-      noiseGainNodeRef.current.connect(pitchShifterNodeRef.current);
+    // Dynamic routing: Connect noise directly to channel 1 of ChannelMergerNode
+    // to keep the background noise natural and un-pitched.
+    if (channelMergerNodeRef.current) {
+      noiseGainNodeRef.current.connect(channelMergerNodeRef.current, 0, 1);
     }
     noiseGainNodeRef.current.connect(ctx.destination);
 
