@@ -150,6 +150,9 @@ export default function App() {
   const [textInput, setTextInput] = useState('');
 
   const [activeTheme, setActiveTheme] = useState<string>(() => localStorage.getItem('anon_active_theme') || 'cyberpunk');
+  const [showTutorial, setShowTutorial] = useState<boolean>(() => {
+    return localStorage.getItem('anon_tutorial_dismissed') !== 'true';
+  });
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const changeTheme = (newTheme: string) => {
@@ -515,6 +518,12 @@ export default function App() {
             <p className="text-[11px] leading-relaxed text-slate-500 text-center max-w-sm mx-auto font-sans font-medium">
               Vocal pitch morphing, ambient environmental synthesizers, and ephemeral file relays run entirely client-side. Complete sovereign user containment.
             </p>
+            
+            <div className="text-center mt-3 pt-2.5 border-t border-slate-800/40">
+              <span className="text-[9px] font-mono text-slate-400 font-bold uppercase tracking-wider">
+                Developer: <span className="text-theme-accent">Kartik Kushwah</span>
+              </span>
+            </div>
           </div>
         </div>
       </main>
@@ -901,6 +910,36 @@ export default function App() {
             )}
             <div ref={chatBottomRef} />
           </div>
+
+          {/* QUICK ONBOARDING GUIDE BANNER */}
+          {showTutorial && (
+            <div className="mx-4 mb-3 p-3 bg-slate-950/90 border border-theme-accent/20 rounded-xl flex items-start justify-between gap-3 shadow-[0_4px_20px_rgba(0,0,0,0.5)] backdrop-blur-md animate-fadeIn shrink-0" id="onboarding-guide">
+              <div className="flex gap-2.5">
+                <div className="p-1.5 rounded-lg bg-theme-accent-10 text-theme-accent shrink-0 mt-0.5">
+                  <HelpCircle className="w-4 h-4 text-neon-cyan" />
+                </div>
+                <div>
+                  <h4 className="text-[10px] font-mono font-bold text-white uppercase tracking-wider">Quick Start Guide</h4>
+                  <p className="text-[10px] text-slate-400 font-sans mt-0.5 leading-relaxed font-semibold">
+                    🎙️ Click <strong className="text-slate-200">"MIC OFF"</strong> at the top to toggle your voice scrambler.<br />
+                    🎛️ Adjust your <strong className="text-slate-200">Vocal Pitch / Resonance Sliders</strong> in the right-side panel to disguise your identity.<br />
+                    🔥 Enable <strong className="text-slate-200">"Burn Mode"</strong> before sending a text to make it auto-destruct.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowTutorial(false);
+                  localStorage.setItem('anon_tutorial_dismissed', 'true');
+                }}
+                className="text-slate-500 hover:text-white transition-colors cursor-pointer p-0.5"
+                title="Dismiss tutorial"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
           {/* MESSAGE FORM INPUT TRAY */}
           <form onSubmit={handleSendMessage} className="p-4 border-t border-slate-800 bg-deep-black/60 flex flex-col gap-2.5" id="chat-form">
@@ -1346,6 +1385,13 @@ export default function App() {
             <p className="text-[9px] text-slate-500 font-sans font-medium text-center leading-normal">
               Spawns simulated clients in memory to test ephemeral reading countdowns, spoiler tags, and democratic vote kick routing.
             </p>
+          </div>
+
+          {/* Developer Attribution Footer */}
+          <div className="border-t border-slate-800/50 pt-3.5 mt-auto text-center shrink-0">
+            <span className="text-[9px] font-mono text-slate-400 font-bold uppercase tracking-widest">
+              Developer: <span className="text-theme-accent">Kartik Kushwah</span>
+            </span>
           </div>
         </aside>
 
