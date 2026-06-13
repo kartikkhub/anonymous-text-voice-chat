@@ -80,7 +80,12 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
     // Verify block status from the server
     const checkBlobAndJoin = async () => {
       try {
-        const response = await fetch(`/api/check-block?sessionId=${encodeURIComponent(sessionId)}&hashtag=${encodeURIComponent(hashtag)}`);
+        const backendUrl = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '');
+        const checkBlockUrl = backendUrl
+          ? `${backendUrl}/api/check-block?sessionId=${encodeURIComponent(sessionId)}&hashtag=${encodeURIComponent(hashtag)}`
+          : `/api/check-block?sessionId=${encodeURIComponent(sessionId)}&hashtag=${encodeURIComponent(hashtag)}`;
+
+        const response = await fetch(checkBlockUrl);
         const blockData = await response.json();
         if (blockData.blocked) {
           setError(`You are blocked from entering ${hashtag} for 24 hours. Remaining time: ${blockData.remainingHours || 12} hour(s)`);
@@ -89,8 +94,17 @@ export function useAnonymousChat(hashtag: string, sessionId: string) {
         }
 
         // Establish WS connection on dynamic URL (compatible with Dev app, production server)
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}`;
+        let wsUrl = '';
+        if (backendUrl) {
+          if (backendUrl.startsWith('http')) {
+            wsUrl = backendUrl.replace(/^http/, 'ws');
+          } else {
+            wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${backendUrl}`;
+          }
+        } else {
+          const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+          wsUrl = `${protocol}//${window.location.host}`;
+        }
         const ws = new WebSocket(wsUrl);
         socketRef.current = ws;
 
